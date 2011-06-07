@@ -1,0 +1,11 @@
+tests/reports/*
+.DS_Store
+.project
+build/
+.settings
+Services_*.tgz
+~$*
+*.iml
+*.ipr
+*.iws
+
