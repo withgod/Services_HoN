@@ -1,4 +1,4 @@
-<?
+<?php
 
 require_once 'HTTP/Request2.php';
 
@@ -11,9 +11,26 @@ class Services_HoN
     protected $lastResponse  = null;
     protected $lastException = null;
 
+    /*
+    protected $cachable      = false;
+    protected $cacheProvider = 'file';
+    protected $avaiableCacheProvider = array('memcached', 'file', 'memory');
+    protected $cacheOption   = 'd=/tmp,ttl=300'; //'h=127.0.0.1:11211,ttl=60*60*5'
+    protected $cacheLevel    = 1;//1 = string table, 9 = all(not yet)
+    protected $cacheOnMemory = false;
+
+        $cache           = false,
+        $cacheProvider   = 'file',
+        $cacheLevel      = 1,
+     */
+
     protected $debug         = false;
-    public function __construct($request = null, $apiBase = null, $debug = false)
-    {
+
+    public function __construct(
+        $request = null,
+        $apiBase = null,
+        $debug   = false
+    ) {
         if (!empty($apiBase)) {
             $this->apiBase = $apiBase;
         }
@@ -28,7 +45,12 @@ class Services_HoN
         $this->debug = $debug;
     }
 
-    public function isNumericTargets($target = null)
+    public function getRequest()
+    {
+        return $this->request;
+    }
+
+    protected function isNumericTargets($target = null)
     {
         if (!empty($target)) {
             $allNumeric = true;
@@ -51,21 +73,27 @@ class Services_HoN
     protected function buildQuery($f = null, $target = null)
     {
         $query   = 'f=' . $f . '&';
-        $arrname = '';
-        if ($this->isNumericTargets($target)) {
-            $query .= 'opt=aid&aid[]=';
-            $arrname = 'aid';
+        $optname = '';
+        if ($f == 'match_stats') {
+            $optname = 'mid';
+        } else if ($f == 'stringtable') {
+            $optname = 'trans';
+        } else if ($this->isNumericTargets($target)) {
+            $optname = 'aid';
         } else {
-            $query .= 'opt=nick&nick[]=';
-            $arrname = 'nick';
+            $optname = 'nick';
         }
+
+        $query .= 'opt=' . $optname . '&' . $optname . '[]=';
         if (is_array($target)) {
-            $query .= join('&' . $arrname . '[]=', $target);
+            $query .= join('&' . $optname. '[]=', $target);
         } else {
             $query .= $target;
         }
-        if ($this->debug)
+
+        if ($this->debug) {
             var_dump(array('build query', $query));
+        }
         return $query;
     }
 
@@ -111,7 +139,8 @@ class Services_HoN
         return $result;
     }
 
-    public function nick2id($target = null) {
+    public function nick2id($target = null)
+    {
         $result = array();
         if (!empty($target)) {
             $param = $this->buildQuery('nick2id', $target);
@@ -127,7 +156,8 @@ class Services_HoN
         return $result;
     }
 
-    public function id2nick($target = null) {
+    public function id2nick($target = null)
+    {
         $result = array();
         if (!empty($target)) {
             $param = $this->buildQuery('id2nick', $target);
@@ -143,23 +173,76 @@ class Services_HoN
         return $result;
     }
 
+    /**
+     * team id 1 = legion
+     * team id 2 = hellbourne
+     */
+    public function matchStats($target = null)
+    {
+        $result = array();
+        if (!empty($target)) {
+            $param = $this->buildQuery('match_stats', $target);
+            $response = simplexml_load_string($this->doRequest($param));
+            if (!empty($response)) {
+                foreach ($response->stats->match as $match) {
+                    $mid = (string)$match->attributes()->mid;
+                    $tmp = array('legion' => array(), 'hellbourne' => array());
+                    $_team_result = array(
+                        'legion'     => array('players' => array()),
+                        'hellbourne' => array('players' => array())
+                    );
+                    foreach ($match->team as $team) {
+                        $team_name_tmp = (string)$team->attributes()->side;
+                        $team_name  =  $team_name_tmp == 1 ? 'legion' : 'hellbourne';
+                        $team_score = array();
+                        foreach ($team->stat as $stat) {
+                            $tmp = split('_', (string)$stat->attributes()->name);
+                            $_key = strtolower($tmp[1]);
+                            $team_score[$_key] = (string)$stat;
+                        }
+                        $_team_result[$team_name]['score'] = $team_score;
+                    }
+                    foreach ($match->match_stats->ms as $hero_stat) {
+                        $tmp_hero_stat = array();
+                        $tmp_hero_stat['aid'] = (string)
+                            $hero_stat->attributes()->aid;
+                        foreach ($hero_stat as $hero_stat_item) {
+                            $_key   = (string)$hero_stat_item->attributes()->name;
+                            $_value = (string)$hero_stat_item;
+                            $tmp_hero_stat[$_key] = $_value;
+                        }
+                        $team_name  = $tmp_hero_stat['team'] == 1 ?
+                            'legion' : 'hellbourne';
+                        $_team_result[$team_name]['players'][$tmp_hero_stat['nickname']] = $tmp_hero_stat;
+                    }
+                    $result[$mid] = $_team_result;
+                }
+            }
+        }
+        return $result;
+    }
+
     public function playerStats($target = null)
     {
+        $result = array();
         if (!empty($target)) {
             $param = $this->buildQuery('player_stats', $target);
             $response = simplexml_load_string($this->doRequest($param));
-            $result = array();
             if (!empty($response)) {
                 foreach ($response->stats->player_stats as $player) {
-                    $_result = array('ranked' => array(), 'public' => array(), 'casual' => array());
+                    $_result = array(
+                        'ranked' => array(),
+                        'public' => array(),
+                        'casual' => array()
+                    );
                     $_result['aid'] = (string)$player->attributes()->aid;
                     foreach ($player->stat as $stat ) {
                         $key = (string)$stat->attributes()->name;
-                        $_key = strtolower(preg_replace('/^[a-z]{2,3}_/', '',$key));
+                        $_key = strtolower(preg_replace('/^[a-z]{2,3}_/', '', $key));
                         $val = (string)$stat;
-                        if (preg_match('/^rnk_/', $key )) { //ranked
+                        if (preg_match('/^rnk_/', $key)) { //ranked
                             $_result['ranked'][$_key] = $val;
-                        } else if (preg_match('/^cs_/', $key )) { //casual
+                        } else if (preg_match('/^cs_/', $key)) { //casual
                             $_result['casual'][$_key] = $val;
                         } else { //public or global value
                             if ($key == 'nickname') {
@@ -172,31 +255,73 @@ class Services_HoN
                     $result[] = $_result;
                 }
             }
-            //var_dump($result);
-            return $result;
         }
+        return $result;
+    }
+
+    /**
+     * not official api.
+     * utility function
+     */
+    public function heroInfoTable($lang = 'en')
+    {
+        $result = array();
+        if (is_string($lang)) {
+            $stringTable = $this->stringTable($lang);
+            foreach ($stringTable->stringtables->trans->stat as $item) {
+                $_key = (string)$item->attributes()->name;
+                if (preg_match('/^Hero_.+/', $_key)) {
+                    $tmp  = split('_', $_key);
+                    $key  = 'Hero_' . $tmp[1];
+                    if (!isset($result[$key])) {
+                        $result[$key] = array();
+                    }
+                    $result[$key][$tmp[2]] = (string)$item;
+                }
+            }
+        }
+        return $result;
+    }
+
+    public function stringTable($target)
+    {
+        $response = null;
+        if (!empty($target)) {
+            $param = $this->buildQuery('stringtable', $target);
+            $response = simplexml_load_string($this->doRequest($param));
+        }
+        return $response;
     }
 
     protected function doRequest($param)
     {
-        if ($this->debug)
+        if ($this->debug) {
             var_dump(array('doRequest start param[' . $param . ']'));
+        }
         $this->lastRequest = clone $this->request;
         $this->lastRequest->setUrl($this->apiBase . '?' . $param);
         try {
             $this->lastResponse = $this->lastRequest->send();
-            if (!$this->lastResponse->getStatus() == '200') {
-                throw new Exception('invalid server response [' . $this->lastResponse->getStatus() . ']');
+            if ($this->lastResponse->getStatus() != 200) {
+                throw new Exception(
+                    'invalid server response [' .
+                    $this->lastResponse->getStatus() .
+                    ']'
+                );
             }
-            if ($this->debug)
-                var_dump('doRequest getBody[' . $this->lastResponse->getBody() . ']');
+            if ($this->debug) {
+                var_dump(
+                    'doRequest getBody[' .
+                    $this->lastResponse->getBody() .
+                    ']'
+                );
+            }
 
             return $this->lastResponse->getBody();
         } catch (Exception $e) {
             throw new Exception($e->getMessage());
         }
-
-
+        return null;
     }
 }
 ?>

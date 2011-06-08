@@ -14,12 +14,12 @@ api list
 x   Player Stats
 x   Player Match History
     Player Hero Stats
-    Match Stats
+x   Match Stats
     Clan Info
     Clan Roster
 x   Nickname To Account ID
 x   Account ID To Nickname
-    String Table
+x   String Table
     Item Info
     State Info
 

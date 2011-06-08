@@ -9,8 +9,7 @@
     verbose="true"
     strict="true">
     <php>
-        <includePath>../</includePath>
-        <includePath>.</includePath>
+        <includePath>../:.</includePath>
     </php>
     <filter>
         <whitelist>
