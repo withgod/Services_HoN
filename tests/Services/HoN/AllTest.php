@@ -45,12 +45,12 @@ class Services_HoN_AllTest extends PHPUnit_Framework_TestCase
     {
         $this->assertEquals(count($this->api->history('withgod')->ranked()), 1);
         $this->assertEquals(count($this->api->history('withgod')->pub()),  1);
-        //dont play casual mode
-        $this->assertEquals(count($this->api->history('withgod')->casual()),  0);
+        $this->assertEquals(count($this->api->history('withgod')->casual()),  1);
 
         //testie's ranked match history dosent work... 2011/06/08
         //http://xml.heroesofnewerth.com/xml_requester.php?f=ranked_history&opt=nick&nick[]=AngryTestie
-        $this->assertEquals(count($this->api->history(array('withgod', 'AngryTestie', 'CarDinaL', 'Tralfamadore'))->ranked()),  3);
+		//now woking testie's history 2011/10/02
+        $this->assertEquals(count($this->api->history(array('withgod', 'AngryTestie', 'CarDinaL', 'Tralfamadore'))->ranked()),  4);
     }
 
     public function testMatchStats()
